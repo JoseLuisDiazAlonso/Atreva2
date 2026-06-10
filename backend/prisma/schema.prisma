@@ -1,0 +1,221 @@
+// ============================================================
+// SCHEMA PRISMA — Fleet & Waste Management App (Atreva2)
+// Versión definitiva — Card #6
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// BLOQUE 1: AUTENTICACIÓN (2 tablas)
+// ============================================================
+
+model Usuario {
+  id               String     @id @default(cuid())
+  email            String     @unique
+  nombre           String
+  passwordHash     String
+  rol              RolUsuario @default(OPERADOR)
+  activo           Boolean    @default(true)
+  intentosFallidos Int        @default(0)
+  bloqueadoHasta   DateTime?
+  creadoEn         DateTime   @default(now())
+  actualizadoEn    DateTime   @updatedAt
+
+  sesiones Sesion[]
+
+  @@map("usuarios")
+}
+
+model Sesion {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  usuarioId String
+  expiraEn  DateTime
+  creadoEn  DateTime @default(now())
+  ipOrigen  String?
+  userAgent String?
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([usuarioId])
+  @@index([expiraEn])
+  @@map("sesiones")
+}
+
+// ============================================================
+// BLOQUE 2: TABLAS MAESTRAS — simplificadas (4 tablas)
+// ============================================================
+
+model Conductor {
+  id     String @id @default(cuid())
+  nombre String
+
+  rutas        Ruta[]
+  combustibles Combustible[]
+  kilometrajes Kilometraje[]
+
+  @@map("conductores")
+}
+
+model Vehiculo {
+  id        String @id @default(cuid())
+  matricula String @unique
+
+  rutas        Ruta[]
+  combustibles Combustible[]
+  kilometrajes Kilometraje[]
+
+  @@map("vehiculos")
+}
+
+model Cliente {
+  id     String @id @default(cuid())
+  nombre String
+
+  rutas    Ruta[]
+  residuos Residuo[]
+  refoods  Refood[]
+
+  @@map("clientes")
+}
+
+model Planta {
+  id     String @id @default(cuid())
+  nombre String
+
+  @@map("plantas")
+}
+
+// ============================================================
+// BLOQUE 3: OPERACIONES con campo observaciones (3 tablas)
+// ============================================================
+
+model Ruta {
+  id              String    @id @default(cuid())
+  fecha           DateTime  @db.Date
+  conductorId     String
+  vehiculoId      String
+  clienteId       String
+  horaLlegada     DateTime? @db.Time
+  horaSalida      DateTime? @db.Time
+  tiempoEnCliente Int?      // minutos (calculado automáticamente)
+  observaciones   String?
+  creadoEn        DateTime  @default(now())
+  actualizadoEn   DateTime  @updatedAt
+
+  conductor Conductor @relation(fields: [conductorId], references: [id])
+  vehiculo  Vehiculo  @relation(fields: [vehiculoId], references: [id])
+  cliente   Cliente   @relation(fields: [clienteId], references: [id])
+
+  @@index([fecha])
+  @@index([conductorId])
+  @@index([vehiculoId])
+  @@index([clienteId])
+  @@index([fecha, conductorId])
+  @@index([fecha, vehiculoId])
+  @@map("rutas")
+}
+
+model Combustible {
+  id            String   @id @default(cuid())
+  fecha         DateTime @db.Date
+  conductorId   String
+  vehiculoId    String
+  litros        Decimal  @db.Decimal(8, 2)
+  precioLitro   Decimal  @db.Decimal(6, 3)
+  precioTotal   Decimal  @db.Decimal(10, 2)
+  gasolinera    String?
+  observaciones String?
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  conductor Conductor @relation(fields: [conductorId], references: [id])
+  vehiculo  Vehiculo  @relation(fields: [vehiculoId], references: [id])
+
+  @@index([fecha])
+  @@index([conductorId])
+  @@index([vehiculoId])
+  @@index([fecha, vehiculoId])
+  @@map("combustible")
+}
+
+model Kilometraje {
+  id            String   @id @default(cuid())
+  fecha         DateTime @db.Date
+  conductorId   String
+  vehiculoId    String
+  kmInicio      Int?
+  kmFin         Int?
+  kmRecorridos  Int
+  observaciones String?
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  conductor Conductor @relation(fields: [conductorId], references: [id])
+  vehiculo  Vehiculo  @relation(fields: [vehiculoId], references: [id])
+
+  @@index([fecha])
+  @@index([conductorId])
+  @@index([vehiculoId])
+  @@index([fecha, vehiculoId])
+  @@map("kilometraje")
+}
+
+// ============================================================
+// BLOQUE 4: RESIDUOS Y REFOOD (2 tablas)
+// ============================================================
+
+model Refood {
+  id            String   @id @default(cuid())
+  fecha         DateTime @db.Date
+  clienteId     String
+  cantidad      Decimal  @db.Decimal(10, 2)
+  numeroAlbaran String
+  observaciones String?
+  creadoEn      DateTime @default(now())
+  actualizadoEn DateTime @updatedAt
+
+  cliente Cliente @relation(fields: [clienteId], references: [id])
+
+  @@index([fecha])
+  @@index([clienteId])
+  @@index([fecha, clienteId])
+  @@map("refood")
+}
+
+model Residuo {
+  id              String   @id @default(cuid())
+  clienteId       String
+  periodo         DateTime @db.Date  // primer día del mes: 2025-10-01
+  fraccionResto   Decimal  @db.Decimal(10, 2) @default(0)
+  envasesPlastico Decimal  @db.Decimal(10, 2) @default(0)
+  cartonPapel     Decimal  @db.Decimal(10, 2) @default(0)
+  vidrio          Decimal  @db.Decimal(10, 2) @default(0)
+  total           Decimal  @db.Decimal(10, 2) @default(0)
+  creadoEn        DateTime @default(now())
+  actualizadoEn   DateTime @updatedAt
+
+  cliente Cliente @relation(fields: [clienteId], references: [id])
+
+  @@unique([clienteId, periodo]) // un registro por cliente/mes
+  @@index([clienteId])
+  @@index([periodo])
+  @@index([clienteId, periodo])
+  @@map("residuos")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum RolUsuario {
+  ADMIN
+  OPERADOR
+}
